@@ -1,124 +1,173 @@
-from outputThings import ask,success,info,error,cls,setTitle
-from encryptionThings import genKey,encrypt
-from time import sleep as wait
-from pathlib import Path as PathCheck
-import os.path
-from os import getcwd,remove
-from os import walk as oswalk
-setTitle("Archivemedes")
+from outputUtils import ask,error,info,success,cls,divisor,exitScript
+from encryptUtils import genKey,encrypt
+import threading
+from os import getcwd
+from os.path import join as joinPath
+from os.path import exists as fileExists
+from os.path import isdir as fileIsDirectory
+from os.path import basename as fileBasename
+from os import walk as fileWalk
+from os import rename as fileRename
+from os import remove as fileRemove
+from pathlib import Path as pathlibPath
 cls()
 
-# Startup messages
-info("""
- -------------------  
-|                   |
-|                   |
-| Archivemedes v1.0 |
-|                   |
-|                   |
- -------------------
-""")
-ask("Press enter to continue...\n")
-wait(0.5)
-cls()
-info("Starting...")
-
-# Setting main variables
-folders_to_encrypt = []
 key = None
 cwd = getcwd()
+custom_extension = ".archivemedes"
+folders_to_encrypt = []
 
-# Ask if the user wants to add more folders to the list
-def startAskingForFolders():
-    finished = False
-    while finished == False:
-        folder = ask("Wich FOLDER do you want to encrypt? (Enter things like C://Users/USERNAME/Desktop/Folder)\n")
-        for a in folders_to_encrypt:
-            if a == folder:
-                error("Folder already in the list, pleas enter another folder...")
-                finished = False
-                continue
-        folders_to_encrypt.append(folder)
-        success("Folder named "+folder+" added successfully...")
-        able_to_continue = ask ("Do you want to add another folder to the list? y/n\n").upper()
-        if able_to_continue == "Y":
-            finished = False
-        else:
-            finished = True
-startAskingForFolders()
-cls()
+# Start message
+success("""
+   |--------------------|
+   | Archivemedes v1.1  |
+   |     Rewritten      |
+   |--------------------|
+""")
+ask("Press enter to continue...\n\n")
 
-# Check folders
-info("Starting to check entered folders...")
-for folder in folders_to_encrypt:
-    if os.path.exists(folder) == False:
-        error("Folder named "+folder+" doesn't exists, deleting...")
-        folders_to_encrypt.remove(folder)
-        continue
-    if os.path.isdir(folder) == False:
-        error("Folder named "+folder+" is not a folder, deleting...")
-        folders_to_encrypt.remove(folder)
-success("Finished checking entered folders...")
-wait(1)
+# Key generation phase
+divisor()
 
-info("Creating encryption key...")
+info("Starting to generate encryption key...")
 while key == None:
-    wait(0.5)
-    key = genKey()
-info("Key created successfully, saving it to "+cwd+"/archivemedes_key.txt...")
-if os.path.exists(cwd+"/archivemedes_key.txt") == True:
-    if ask(cwd+"/archivemedes_key.txt already exists, this means that the key of another encryption will be deleted, do you want to continue? y/n\n").upper() == "Y":
-        remove(cwd+"/archivemedes_key.txt")
-    else:
-        exit()
+   key = genKey() 
+success("Successfully generated an encryption key!")
+
+info("\nStarting to save the key in the path "+joinPath(cwd,"archivemedes_key.akf"))
+
+# Check if a key-file already exists
+if fileExists(joinPath(cwd,"archivemedes_key.akf")) == True:
+   response = ask("\nDANGER: Another key-file has been found, if you continue this file will be deleted permanently.\nContinue? y/n\n").upper()
+   if response == "Y":
+      try:
+         fileRemove(joinPath(cwd,"archivemedes_key.akf"))
+         success("Deleted key-file successfully!")
+      except:
+         error("Error ocurred while deleting key-file, please restart.")
+         exitScript()
+   else:
+      error("Ok, closing program.")
+      exitScript()
+
+# Creating key-file
 try:
-    with open(cwd+"/archivemedes_key.txt","wb") as keyfile:
-        keyfile.write(key)
-    success("Successfully created and wrote the key in the file named "+cwd+"/archivemedes_key.txt...")
+   with open(joinPath(cwd,"archivemedes_key.akf"),"wb") as key_file:
+      key_file.write(key)
+   success("Successfully created and writed key-file!")
 except:
-    error("Error ocurred while writing the key in the file named "+cwd+"/archivemedes_key.txt, exiting in 5 seconds...")
-    wait(5)
-    exit()
-ask("Press enter to start encrypting...\n")
-cls()
+   error("Error ocurred while writing key-file, please restart.")
+   exitScript()
 
-# Starting to encrypt
+# Folder selection phase
+divisor()
+
+info("Starting to select folders to encrypt...")
+
+# Asking for folder/s
+def AskForFolders():
+   finished_asking = False
+   while finished_asking == False:
+      folder_to_add = ask("\nWhat folder do you want to encrypt?\n(Ex: C://Users//USERNAME//Desktop//FOLDER)\n")
+
+      # Check for duplicates
+      duplicate = False
+      for folder in folders_to_encrypt:
+            if folder == folder_to_add:
+               error('Folder with path "'+folder_to_add+'" is already on the list. Skipping...')
+               duplicate = True
+               break
+      if duplicate == True:
+         continue
+      
+      # Adding the folder
+      try:
+            folders_to_encrypt.append(folder_to_add)
+            success('Successfully added folder with path "'+folder_to_add+'"!')
+      except:
+         error('Error ocurred while adding folder with path "'+folder_to_add+'". Skipping...')
+      able_to_repeat = ask("\nDo you want to add another folder?\ny/n\n").upper()
+      if able_to_repeat == "Y":
+         finished_asking = False
+      else:
+         finished_asking = True
+AskForFolders()
+
+# Checking folders
+info("\nStarting to check entered folder/s...\n")
 for folder in folders_to_encrypt:
-    folder_files = []
-    # Get directory files (subdirectories included)
-    for (dir_path, dir_names, file_names) in oswalk(folder,topdown=True):
-        for file in file_names:
-            folder_files.append(os.path.join(dir_path, file))
+   # Checking if folder exists
+   if fileExists(folder) == False:
+      error('Deleting folder with path "'+folder+'" from the list... (Path doesnt exists)')
+      folders_to_encrypt.remove(folder)
+   # Checking if folder is actually a folder
+   elif fileIsDirectory(folder) == False:
+      error('Deleting folder with path "'+folder+'" from the list... (Path isnt a folder)')
+      folders_to_encrypt.remove(folder)
+info("Finished checking entered folder/s...")
+ask("\nPress enter to start encrypting the folders...")
 
-    # Indexing every file obtained from the folder and encrypting the content
-    for file in folder_files:
-        file_content = None
+# Extension phase
+divisor()
 
-        # Open the file and extract the content in binary
-        try:
-            with open(file,"rb") as fileContent:
-                file_content = fileContent.read()
-        except:
-            error("Error ocurred while opening file named "+file+". Skipping...")
-            continue
-        
-        # Encrypt the content
-        try:
-            file_content = encrypt(file_content,key)
-        except:
-            error("Error ocurred while encrypting file named "+file+". Skipping...")
-            continue
-        
-        # Write encrypted content in the file
-        try:
-            with open(file,"wb") as fileContent:
-                fileContent.write(file_content)
-        except:
-            error("Error ocurred while writing file named "+file+". Skipping...")
-            continue
-
-        success("Successfully encrypted file named "+file+"...")
+able_to_make_new_extension = ask("Do you want to add a custom file-extension for the encrypted files? y/n\n").upper()
+if able_to_make_new_extension == "Y":
+   new_extension = ask("Please enter new extension.\n(Ex: new_extension_file)\n")
+   new_extension = new_extension.replace(" ","")
+   new_extension = new_extension.replace(".","")
+   new_extension = new_extension.replace("!","")
+   new_extension = new_extension.replace("?","")
+   custom_extension = new_extension
+   info("\nCurrent extension: "+custom_extension)
+else:
+   info("\nCurrent extension: "+custom_extension)
 
 
-success("\nFinished encrypting\n")
-ask("Enter to close Archivemedes")
+# Encryption phase
+divisor()
+
+info("Starting to encrypt folder/s...\n")
+
+# Indexing entered folders
+for folder in folders_to_encrypt:
+   info('Encrypting '+folder)
+   files_to_encrypt = []
+
+   # Gathering files to encrypt
+   for root, dirs, folder_files in fileWalk(folder,topdown=True):
+      for file in folder_files:
+         files_to_encrypt.append(joinPath(root,file))
+
+   # Encrypting files
+   
+   for file in files_to_encrypt:
+      content = None
+      content = None
+      try:
+         # Extracting file content
+         with open(file,"rb") as file_content:
+            content = file_content.read()
+         content = encrypt(content,key)
+         if content == None:
+            content = encrypt(content,key)
+         if content == None:
+            error('  Error ocurred while enctronoososdof file with path "'+fileBasename(file)+'". Skipping...')
+            # Writing encrypted content
+         with open(file,"wb") as file_content:
+            file_content.write(content)
+         file_parent = pathlibPath(file).parent.absolute()
+         fileRename(file,joinPath(file_parent,fileBasename(file)+"."+custom_extension))
+         success("   "+fileBasename(file)+" was encrypted successfully!")
+      except:
+         error('  Error ocurred while encrypting file with path "'+fileBasename(file)+'". Skipping...')
+   info("Finished encrypting "+folder+"\n")
+
+# Final phase
+divisor()
+
+info('''
+Finished encrypting folders
+
+''')
+
+exitScript()
